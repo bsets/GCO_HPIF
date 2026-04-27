@@ -1,4 +1,4 @@
-# GCO-HPIF Slice A Starter
+# GCO-HPIF Part A starter
 
 This starter implements **Part A** of the GCO-HPIF reproducible pipeline:
 
