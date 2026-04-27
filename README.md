@@ -102,4 +102,3 @@ For the full run, the `graph_count` values should be 1000, 5000, and 973.
 - **Part B:** commit the TWITTER train/validation/test split manifest
 - **Part C:** compute the 23 NetworkX features with a 60 second per-graph timeout and log failures dynamically
 - **Part D:** solver wrappers and per-instance result logging
-
