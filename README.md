@@ -1,26 +1,16 @@
 # GCO-HPIF Slice A Starter
 
-This starter implements **Slice A** of the GCO-HPIF reproducible pipeline:
+This starter implements **Part A** of the GCO-HPIF reproducible pipeline:
 
 1. download/load the raw graph datasets
 2. normalize them into simple undirected NetworkX graphs
 3. assign stable `graph_id` values
-4. save a manifest and pickled graph collections for later slices
+4. save a manifest and pickled graph collections for later parts
 
-This slice **does not compute features** and **does not exclude any graphs**.
-Dynamic timeout-based exclusions belong in **Slice C**.
+This part **does not compute features** and **does not exclude any graphs**.
+Dynamic timeout-based exclusions belong in **Part C**.
 
-## Why this slice exists
-
-Your original script already computes the 23 NetworkX features, but it also:
-- depends on local `.pkl` files
-- hard-codes a desktop path
-- pre-excludes graph IDs
-- mixes loading, feature computation, timeout handling, and export into one script
-
-For GitHub, Slice A should only prepare the graph corpus. That keeps later slices easy to test and upload independently.
-
-## Dataset policy used here
+## Datasets
 
 - **IMDB-BINARY** and **COLLAB** are fetched from the TU-format source used by PyG.
 - **TWITTER** is fetched from SNAP `twitter.tar.gz` and parsed as one ego-network per `.edges` file.
@@ -90,7 +80,7 @@ Expected graph counts when fully loaded:
 
 ## Quick validation checks
 
-After the smoke test:
+After the smoke test, use the following lines to check the output:
 
 ```bash
 python - <<'PY'
@@ -107,9 +97,9 @@ PY
 
 For the full run, the `graph_count` values should be 1000, 5000, and 973.
 
-## Next slices
+## Next parts
 
-- **Slice B:** commit the TWITTER train/validation/test split manifest
-- **Slice C:** compute the 23 NetworkX features with a 60 second per-graph timeout and log failures dynamically
-- **Slice D:** solver wrappers and per-instance result logging
+- **Part B:** commit the TWITTER train/validation/test split manifest
+- **Part C:** compute the 23 NetworkX features with a 60 second per-graph timeout and log failures dynamically
+- **Part D:** solver wrappers and per-instance result logging
 
