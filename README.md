@@ -22,13 +22,14 @@ The repository is being built in modular parts so that each stage can be tested 
 - [x] **Part B:** TWITTER train/validation/test split manifest
 - [x] **Part C:** 23 NetworkX graph features with 60-second timeout logging
 - [x] **Part D.1:** Gurobi maximum-clique solver wrapper
-- [ ] **Part D.2:** CliSAT solver wrapper
+- [x] **Part D.2:** CliSAT solver wrapper
 - [ ] **Part D.3:** MOMC solver wrapper
 - [ ] **Part D.4:** EGN training/inference wrapper
 - [ ] **Part D.5:** HGS training/inference wrapper
 - [ ] **Part E:** Hardness label construction
 - [ ] **Part F:** Hardness prediction models
 - [ ] **Part G:** Feature selection and association-rule mining
+- [ ] **Part H:** Computation time prediction models
 
 ---
 
