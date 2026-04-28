@@ -1,0 +1,2 @@
+# Treat the bundled CliSAT executable as binary.
+external/CliSAT/bin/CliSAT binary
