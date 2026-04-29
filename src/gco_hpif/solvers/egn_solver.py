@@ -92,6 +92,7 @@ class EGNConfig:
     interim_dir: Path
     output_dir: Path
     egn_root: Path
+    extra_infer_graph_stores: list[str] | None = None
     dataset: str = "twitter"
     mode: Literal["train", "infer", "train-and-infer", "smoke"] = "smoke"
     checkpoint: Path | None = None
@@ -522,6 +523,125 @@ def build_pyg_split_datasets(
     )
 
 
+
+def _parse_extra_graph_store_spec(spec: str) -> tuple[str, Path]:
+    if "=" not in spec:
+        raise ValueError(
+            "Invalid --extra-infer-graph-store value. Expected format: dataset=path"
+        )
+
+    dataset_name, raw_path = spec.split("=", 1)
+    dataset_name = dataset_name.strip()
+    raw_path = raw_path.strip()
+
+    if not dataset_name:
+        raise ValueError(f"Invalid dataset name in graph-store spec: {spec!r}")
+    if not raw_path:
+        raise ValueError(f"Invalid path in graph-store spec: {spec!r}")
+
+    path = Path(raw_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Extra inference graph store not found: {path}")
+
+    return dataset_name, path
+
+
+def _load_direct_graph_store(path: Path) -> Any:
+    name = path.name.lower()
+
+    if name.endswith((".pkl.gz", ".pickle.gz", ".gpickle.gz")):
+        with gzip.open(path, "rb") as handle:
+            return pickle.load(handle)
+
+    if name.endswith((".pkl", ".pickle", ".gpickle")):
+        with path.open("rb") as handle:
+            return pickle.load(handle)
+
+    raise ValueError(
+        f"Unsupported extra graph-store extension for {path}. "
+        "Expected .pkl, .pickle, .gpickle, .pkl.gz, .pickle.gz, or .gpickle.gz."
+    )
+
+
+def _iter_extra_graph_items(store: Any) -> list[tuple[Any, Any]]:
+    """Return (graph_id_hint, graph_like_object) pairs from common graph stores."""
+    if isinstance(store, dict):
+        if "graphs" in store:
+            return _iter_extra_graph_items(store["graphs"])
+        if "records" in store:
+            return _iter_extra_graph_items(store["records"])
+        if "data" in store:
+            return _iter_extra_graph_items(store["data"])
+
+        return list(store.items())
+
+    if isinstance(store, (list, tuple)):
+        return list(enumerate(store))
+
+    raise TypeError(f"Unsupported extra graph-store type: {type(store).__name__}")
+
+
+def build_extra_pyg_infer_datasets(
+    specs: list[str],
+) -> tuple[list[Any], pd.DataFrame, dict[str, nx.Graph]]:
+    """Build PyG test data from full graph stores outside the Twitter split manifest.
+
+    Each spec is formatted as dataset=path/to/graphs.pkl.gz. All graphs in these
+    stores are treated as test/inference graphs.
+    """
+    extra_test_data: list[Any] = []
+    extra_rows: list[dict[str, Any]] = []
+    extra_nx_by_graph_id: dict[str, nx.Graph] = {}
+
+    for spec in specs:
+        dataset_name, graph_store_path = _parse_extra_graph_store_spec(spec)
+        store = _load_direct_graph_store(graph_store_path)
+        items = _iter_extra_graph_items(store)
+
+        for position, (graph_id_hint, graph_like) in tqdm(
+            list(enumerate(items)),
+            total=len(items),
+            desc=f"EGN materialise all-test {dataset_name}",
+        ):
+            graph = normalise_networkx_graph(graph_like)
+
+            graph_id = f"{dataset_name}_{position:06d}"
+            if isinstance(graph_id_hint, str) and graph_id_hint:
+                graph_id = f"{dataset_name}_{graph_id_hint}"
+
+            source_index = position
+            try:
+                if isinstance(graph_id_hint, int):
+                    source_index = int(graph_id_hint)
+            except Exception:
+                source_index = position
+
+            data = networkx_to_pyg_data(graph)
+            data.graph_id = str(graph_id)
+            data.source_index = int(source_index)
+
+            extra_test_data.append(data)
+            extra_nx_by_graph_id[str(graph_id)] = graph
+            extra_rows.append(
+                {
+                    "dataset": dataset_name,
+                    "graph_id": str(graph_id),
+                    "source_index": int(source_index),
+                    "split": "test",
+                    "n_nodes": int(graph.number_of_nodes()),
+                    "n_edges": int(graph.number_of_edges()),
+                    "graph_hash_sha256": "",
+                    "source_loader": "extra_infer_graph_store",
+                    "source_name": str(graph_store_path),
+                    "source_ego_id": "",
+                }
+            )
+
+    extra_df = pd.DataFrame(extra_rows, columns=SPLIT_MANIFEST_COLUMNS)
+    return extra_test_data, extra_df, extra_nx_by_graph_id
+
+
+
 def require_torch_geometric() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
     """Lazy-import torch/PyG so non-EGN tests can run without GPU dependencies."""
 
@@ -740,6 +860,25 @@ def train_egn_model(
     return net, logs_df, checkpoint
 
 
+
+def _torch_load_trusted_checkpoint(checkpoint: Path, map_location: Any) -> Any:
+    """Load a locally generated trusted PyTorch checkpoint.
+
+    PyTorch 2.6 changed torch.load's default to weights_only=True. The EGN
+    wrapper saves the full upstream model object, so inference needs
+    weights_only=False. Only use this for checkpoints you generated locally or
+    otherwise trust.
+    """
+    import torch as _torch
+
+    try:
+        return _torch.load(checkpoint, map_location=map_location, weights_only=False)
+    except TypeError:
+        # Older PyTorch versions do not support weights_only.
+        return _torch.load(checkpoint, map_location=map_location)
+
+
+
 def infer_egn_model(
     test_data: list[Any],
     test_rows: pd.DataFrame,
@@ -766,7 +905,7 @@ def infer_egn_model(
                 f"Checkpoint not found: {checkpoint}. Run --mode train-and-infer "
                 "or pass --checkpoint /path/to/trained_egn_model.pt."
             )
-        net = torch.load(checkpoint, map_location=device)
+        net = _torch_load_trusted_checkpoint(checkpoint, map_location=device)
 
     net.to(device)
     net.eval()
@@ -985,6 +1124,15 @@ def run_egn_pipeline(config: EGNConfig) -> None:
         dataset=config.dataset,
         limit_per_split=config.limit_per_split,
     )
+
+    if config.extra_infer_graph_stores:
+        extra_test_data, extra_split_df, extra_nx_by_graph_id = build_extra_pyg_infer_datasets(
+            config.extra_infer_graph_stores
+        )
+        test_data.extend(extra_test_data)
+        if not extra_split_df.empty:
+            split_df = pd.concat([split_df, extra_split_df], ignore_index=True)
+        nx_by_graph_id.update(extra_nx_by_graph_id)
 
     config.output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -44,6 +44,16 @@ def build_parser() -> argparse.ArgumentParser:
             "and modules_and_utils.py. Can also be set via GCO_HPIF_EGN_ROOT."
         ),
     )
+    parser.add_argument(
+        "--extra-infer-graph-store",
+        action="append",
+        default=[],
+        help=(
+            "Additional all-test graph store for inference, formatted as dataset=path. "
+            "Can be supplied multiple times, e.g. collab=... imdb_binary=..."
+        ),
+    )
+
     parser.add_argument("--dataset", default="twitter", help="Dataset to run. Default: twitter.")
     parser.add_argument(
         "--mode",
@@ -95,6 +105,7 @@ def main() -> None:
         interim_dir=args.interim_dir,
         output_dir=args.output_dir,
         egn_root=args.egn_root,
+        extra_infer_graph_stores=args.extra_infer_graph_store,
         dataset=args.dataset,
         mode=args.mode,
         checkpoint=args.checkpoint,
