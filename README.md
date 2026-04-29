@@ -2,53 +2,45 @@
 
 **GCO-HPIF** stands for **Graph-Based Combinatorial Optimization — Hardness Prediction and Interpretation Framework**.
 
-This repository contains code for reproducing the pipeline used to study graph-instance hardness for the Maximum Clique Problem (MCP). The pipeline includes:
-
-1. raw graph dataset ingestion,
-2. fixed TWITTER train/validation/test split generation,
-3. NetworkX-based graph feature computation,
-4. solver wrappers and per-instance solver result logging,
-5. machine-learning-based hardness prediction,
-6. feature selection, and
-7. association-rule-mining-based explanation of hardness patterns.
-
-The repository is being built in modular parts so that each stage can be tested independently before being integrated into a full end-to-end pipeline.
+This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the **Maximum Clique Problem (MCP)**. The completed stages currently cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, and solver wrappers for exact and learned maximum-clique solvers.
 
 ---
 
-## Pipeline status
+## Completed pipeline status
 
-- [x] **Part A:** Raw graph ingestion and graph manifests
-- [x] **Part B:** TWITTER train/validation/test split manifest
-- [x] **Part C:** 23 NetworkX graph features with 60-second timeout logging
-- [x] **Part D.1:** Gurobi maximum-clique solver wrapper
-- [x] **Part D.2:** CliSAT solver wrapper
-- [x] **Part D.3:** MOMC solver wrapper
-- [x] **Part D.4:** EGN training/inference wrapper
-- [x] **Part D.5:** HGS training/inference wrapper
-- [ ] **Part E:** Hardness label construction
-- [ ] **Part F:** Hardness prediction models
-- [ ] **Part G:** Feature selection and association-rule mining
-- [ ] **Part H:** Computation time prediction models
+| Part     | Status   | Description                                                 |
+| -------- | -------- | ----------------------------------------------------------- |
+| Part A   | Complete | Raw graph ingestion and graph manifests                     |
+| Part B   | Complete | Fixed TWITTER 60/20/20 train/validation/test split manifest |
+| Part C   | Complete | 23 NetworkX graph features with 60-second timeout logging   |
+| Part D.1 | Complete | Gurobi maximum-clique solver wrapper                        |
+| Part D.2 | Complete | CliSAT maximum-clique solver wrapper                        |
+| Part D.3 | Complete | MoMC maximum-clique solver wrapper                          |
+| Part D.4 | Complete | Optional EGN training/inference wrapper                     |
+| Part D.5 | Complete | Optional HGS training/inference wrapper                     |
+
+Future stages planned for this repository include hardness label construction, hardness prediction models, feature selection, association-rule mining, and computation-time prediction.
 
 ---
 
 ## Datasets
 
-The current pipeline uses the following graph datasets:
+The current pipeline uses:
 
-- **IMDB-BINARY**
-- **COLLAB**
-- **TWITTER ego networks**
+* `TWITTER` ego-network graphs from SNAP.
+* `COLLAB` from TU-format graph datasets.
+* `IMDB-BINARY` from TU-format graph datasets.
 
-Dataset handling is automated as much as possible.
+Part A writes graph stores under:
 
-- **IMDB-BINARY** and **COLLAB** are downloaded from the TU-format source used by PyTorch Geometric.
-- **TWITTER** is downloaded from SNAP as `twitter.tar.gz` and parsed as one ego-network per `.edges` file.
-- TWITTER graphs are converted to simple undirected NetworkX graphs.
-- The TWITTER ego node is added back and connected to every node that appears in the corresponding `.edges` file.
+```text
+artifacts/slice_a_full/interim/
+├── twitter_graphs.pkl.gz
+├── collab_graphs.pkl.gz
+└── imdb_binary_graphs.pkl.gz
+```
 
-Generated data files are written under `artifacts/` and are not committed to GitHub.
+Generated data and solver outputs are written under `artifacts/` and are not committed to GitHub.
 
 ---
 
@@ -76,46 +68,42 @@ pytest -q
 
 ---
 
-## Part A: Raw graph ingestion
+## Part A — Raw graph ingestion
 
-Part A downloads and normalizes the raw graph datasets.
-
-It does **not** compute graph features and does **not** exclude any graphs.
-
-Run a smoke test:
+Smoke test:
 
 ```bash
 python -m gco_hpif.cli.prepare_raw_graphs \
-  --output-root ./artifacts/slice_a_smoke \
+  --output-root artifacts/slice_a_smoke \
   --datasets imdb_binary collab twitter \
   --limit 3
 ```
 
-Run the full Part A pipeline:
+Full run:
 
 ```bash
 python -m gco_hpif.cli.prepare_raw_graphs \
-  --output-root ./artifacts/slice_a_full \
+  --output-root artifacts/slice_a_full \
   --datasets imdb_binary collab twitter
 ```
 
 Expected full graph counts:
 
-| Dataset | Graph count |
-|---|---:|
-| IMDB-BINARY | 1000 |
-| COLLAB | 5000 |
-| TWITTER | 973 |
+| Dataset     | Count |
+| ----------- | ----- |
+| TWITTER     | 973   |
+| COLLAB      | 5000  |
+| IMDB-BINARY | 1000  |
 
-Part A creates:
+Main outputs:
 
 ```text
 artifacts/slice_a_full/
 ├── raw/
 ├── interim/
-│   ├── imdb_binary_graphs.pkl.gz
+│   ├── twitter_graphs.pkl.gz
 │   ├── collab_graphs.pkl.gz
-│   └── twitter_graphs.pkl.gz
+│   └── imdb_binary_graphs.pkl.gz
 └── manifests/
     ├── graphs_index.csv
     └── dataset_summary.csv
@@ -123,25 +111,9 @@ artifacts/slice_a_full/
 
 ---
 
-## Part B: TWITTER split manifest
+## Part B — TWITTER split manifest
 
-Part B creates a fixed TWITTER train/validation/test split manifest.
-
-The split follows the original experimental setup used for the trainable solvers:
-
-- first 60% of TWITTER graphs for training,
-- next 20% for validation,
-- remaining graphs for testing.
-
-For the 973 TWITTER graphs loaded by Part A, this gives:
-
-| Split | Graph count |
-|---|---:|
-| train | 584 |
-| validation | 195 |
-| test | 194 |
-
-Create the split manifest:
+Create the fixed 60/20/20 TWITTER split:
 
 ```bash
 python -m gco_hpif.cli.make_twitter_split \
@@ -149,23 +121,23 @@ python -m gco_hpif.cli.make_twitter_split \
   --output data/manifests/twitter_split_60_20_20.csv
 ```
 
-The resulting manifest is committed to the repository because it defines the fixed TWITTER split used later by EGN and HGS.
+Expected split counts:
+
+| Split      | Count |
+| ---------- | ----- |
+| train      | 584   |
+| validation | 195   |
+| test       | 194   |
+
+The split manifest is committed because it defines the reproducible TWITTER split used by EGN and HGS.
 
 ---
 
-## Part C: NetworkX graph feature computation
+## Part C — NetworkX graph features
 
-Part C computes 23 graph-level features using NetworkX/NumPy.
+Part C computes 23 graph-level features using NetworkX/NumPy. Graphs whose features fail or exceed the timeout are logged explicitly.
 
-Only graphs whose features are successfully computed within the per-graph time limit are retained for later solver and machine-learning stages.
-
-The per-graph feature-computation time limit is:
-
-```text
-60 seconds
-```
-
-Run a smoke test:
+Smoke test:
 
 ```bash
 python -m gco_hpif.cli.compute_graph_features \
@@ -177,7 +149,7 @@ python -m gco_hpif.cli.compute_graph_features \
   --timeout-seconds 60
 ```
 
-Run the full feature-computation step:
+Full run:
 
 ```bash
 python -m gco_hpif.cli.compute_graph_features \
@@ -188,7 +160,7 @@ python -m gco_hpif.cli.compute_graph_features \
   --timeout-seconds 60
 ```
 
-Part C creates:
+Main outputs:
 
 ```text
 artifacts/features_full/
@@ -198,39 +170,51 @@ artifacts/features_full/
 └── feature_column_manifest.csv
 ```
 
-`graph_features.csv` contains successful feature rows.
+---
 
-`feature_failures.csv` records graphs that failed or exceeded the 60-second time limit. This makes timeout-based exclusions explicit and reproducible.
+## Common solver-output contract
 
-The adjacency eigenvalue features are defined as:
+All solver wrappers write standardized outputs:
 
 ```text
-feature_Smallest_Eigenvalue_Adjacency
-    Algebraically smallest eigenvalue of the adjacency matrix.
+solver_runs.csv
+solver_errors.csv
+run_summary.csv
+```
 
-feature_Second_Smallest_Eigenvalue_Adjacency
-    Algebraically second-smallest eigenvalue of the adjacency matrix.
+Common columns include:
+
+```text
+dataset
+graph_id
+source_index
+solver_name
+run_type
+time_limit_seconds
+status
+optimality_status
+runtime_seconds
+best_clique_size
+best_clique_nodes
+clique_valid
+num_nodes
+num_edges
+seed
+threads
+mip_gap
+objective_bound
+error_message
 ```
 
 ---
 
-## Part D.1: Gurobi maximum-clique solver wrapper
+## Part D.1 — Gurobi solver wrapper
 
-Part D.1 adds a Gurobi-based exact maximum-clique solver wrapper.
+Gurobi is an optional exact solver backend. You need:
 
-The wrapper uses the complement-graph mixed-integer programming formulation:
-
-- create one binary variable per node,
-- add one constraint for each edge in the complement graph,
-- maximize the number of selected nodes.
-
-The Gurobi wrapper runs only on graph instances whose features were successfully computed in Part C.
-
-Gurobi is an optional solver backend. To run this part, the local machine must have:
-
-- `gurobipy`,
-- a valid Gurobi license,
-- the `GRB_LICENSE_FILE` environment variable configured if the license is stored in a non-default location.
+* `gurobipy`
+* a valid Gurobi license
+* `GRB_LICENSE_FILE` configured if the license is not in the default location
 
 Example:
 
@@ -238,7 +222,7 @@ Example:
 export GRB_LICENSE_FILE=/home/bharat/opt/gurobi1301/gurobi.lic
 ```
 
-Run a Gurobi smoke test:
+Smoke test:
 
 ```bash
 python -m gco_hpif.cli.run_gurobi_solver \
@@ -252,7 +236,7 @@ python -m gco_hpif.cli.run_gurobi_solver \
   --threads 1
 ```
 
-Run the full Gurobi solver step:
+Full run:
 
 ```bash
 python -m gco_hpif.cli.run_gurobi_solver \
@@ -265,57 +249,339 @@ python -m gco_hpif.cli.run_gurobi_solver \
   --threads 1
 ```
 
-Part D.1 creates:
+---
 
-```text
-artifacts/solver_runs/gurobi_full/
-├── solver_runs.csv
-├── solver_errors.csv
-└── run_summary.csv
+## Part D.2 — CliSAT solver wrapper
+
+CliSAT runs on graphs that passed Part C feature computation. The wrapper writes DIMACS input files and standardized solver logs.
+
+Smoke test:
+
+```bash
+python -m gco_hpif.cli.run_clisat_solver \
+  --graphs-index artifacts/slice_a_full/manifests/graphs_index.csv \
+  --features artifacts/features_full/graph_features.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --output-dir artifacts/solver_runs/clisat_smoke \
+  --datasets twitter collab imdb_binary \
+  --limit-per-dataset 2 \
+  --time-limit-seconds 30 \
+  --threads 1
 ```
 
-The Gurobi smoke test and full run have been validated locally after license renewal. Generated solver outputs are not committed to GitHub.
+Full run:
+
+```bash
+python -m gco_hpif.cli.run_clisat_solver \
+  --graphs-index artifacts/slice_a_full/manifests/graphs_index.csv \
+  --features artifacts/features_full/graph_features.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --output-dir artifacts/solver_runs/clisat_full \
+  --datasets twitter collab imdb_binary \
+  --time-limit-seconds 1800 \
+  --threads 1
+```
+
+Default executable path:
+
+```text
+external/CliSAT/bin/CliSAT
+```
+
+---
+
+## Part D.3 — MoMC solver wrapper
+
+MoMC runs on graphs that passed Part C feature computation. If the executable is missing, the CLI can compile it from the bundled C source unless `--no-compile` is used.
+
+Smoke test:
+
+```bash
+python -m gco_hpif.cli.run_momc_solver \
+  --graphs-index artifacts/slice_a_full/manifests/graphs_index.csv \
+  --features artifacts/features_full/graph_features.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --output-dir artifacts/solver_runs/momc_smoke \
+  --datasets twitter collab imdb_binary \
+  --limit-per-dataset 2 \
+  --time-limit-seconds 30 \
+  --threads 1
+```
+
+Full run:
+
+```bash
+python -m gco_hpif.cli.run_momc_solver \
+  --graphs-index artifacts/slice_a_full/manifests/graphs_index.csv \
+  --features artifacts/features_full/graph_features.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --output-dir artifacts/solver_runs/momc_full \
+  --datasets twitter collab imdb_binary \
+  --time-limit-seconds 1800 \
+  --threads 1
+```
+
+Default source/executable locations:
+
+```text
+external/MOMC/src/
+external/MOMC/bin/MoMC
+```
+
+---
+
+## Part D.4 — EGN training and all-test inference
+
+EGN is treated as an optional external integration. The upstream EGN source is not vendored into this repository; clone it locally under:
+
+```text
+external/EGN/erdos_neu
+```
+
+Smoke test:
+
+```bash
+python -m gco_hpif.cli.run_egn_solver \
+  --mode smoke \
+  --split-manifest data/manifests/twitter_split_60_20_20.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --egn-root external/EGN/erdos_neu \
+  --output-dir artifacts/solver_runs/egn_smoke \
+  --dataset twitter \
+  --limit-per-split 2 \
+  --epochs 2 \
+  --inference-samples 2
+```
+
+Train on the TWITTER training split and infer on the TWITTER test split:
+
+```bash
+python -m gco_hpif.cli.run_egn_solver \
+  --mode train-and-infer \
+  --split-manifest data/manifests/twitter_split_60_20_20.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --egn-root external/EGN/erdos_neu \
+  --output-dir artifacts/solver_runs/egn_full \
+  --dataset twitter \
+  --epochs 100 \
+  --train-batch-size 4 \
+  --infer-batch-size 1 \
+  --num-layers 5 \
+  --hidden-1 64 \
+  --hidden-2 1 \
+  --learning-rate 0.001 \
+  --penalty-coeff 4.0 \
+  --seed 66 \
+  --inference-samples 8
+```
+
+Run all-test inference using the trained EGN checkpoint:
+
+```bash
+EGN_CKPT="artifacts/solver_runs/egn_full/trained_egn_model.pt"
+
+python -m gco_hpif.cli.run_egn_solver \
+  --mode infer \
+  --split-manifest data/manifests/twitter_split_60_20_20.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --egn-root external/EGN/erdos_neu \
+  --checkpoint "$EGN_CKPT" \
+  --output-dir artifacts/solver_runs/egn_full_all_test_graphs \
+  --dataset twitter \
+  --infer-batch-size 1 \
+  --inference-samples 8 \
+  --extra-infer-graph-store collab=artifacts/slice_a_full/interim/collab_graphs.pkl.gz \
+  --extra-infer-graph-store imdb_binary=artifacts/slice_a_full/interim/imdb_binary_graphs.pkl.gz
+```
+
+Expected all-test inference count:
+
+| Dataset      | Inference graphs |
+| ------------ | ---------------- |
+| TWITTER test | 194              |
+| COLLAB       | 5000             |
+| IMDB-BINARY  | 1000             |
+
+---
+
+## Part D.5 — HGS training and all-test inference
+
+HGS is treated as an optional external integration. The upstream HGS source is not vendored into this repository; clone it locally under:
+
+```text
+external/HGS/GeometricScatteringMaximalClique
+```
+
+Example local setup:
+
+```bash
+mkdir -p external/HGS
+
+git clone https://github.com/yimengmin/GeometricScatteringMaximalClique.git \
+  external/HGS/GeometricScatteringMaximalClique
+```
+
+Smoke test:
+
+```bash
+python -m gco_hpif.cli.run_hgs_solver \
+  --mode smoke \
+  --split-manifest data/manifests/twitter_split_60_20_20.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --raw-graph-store artifacts/slice_a_full/interim/twitter_graphs.pkl.gz \
+  --hgs-root external/HGS/GeometricScatteringMaximalClique \
+  --output-dir artifacts/solver_runs/hgs_smoke \
+  --dataset twitter \
+  --limit-per-split 2 \
+  --epochs 2 \
+  --infer-splits test \
+  --num-walkers 4
+```
+
+Train on the TWITTER training split and run all-test inference:
+
+```bash
+python -m gco_hpif.cli.run_hgs_solver \
+  --mode train-and-infer \
+  --split-manifest data/manifests/twitter_split_60_20_20.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --raw-graph-store artifacts/slice_a_full/interim/twitter_graphs.pkl.gz \
+  --hgs-root external/HGS/GeometricScatteringMaximalClique \
+  --output-dir artifacts/solver_runs/hgs_full_all_test_graphs \
+  --dataset twitter \
+  --epochs 20 \
+  --train-batch-size 1 \
+  --infer-splits test \
+  --hidden 8 \
+  --num-layers 4 \
+  --learning-rate 0.001 \
+  --penalty-coeff 2.0 \
+  --seed 42 \
+  --num-walkers 20 \
+  --sample-length 90 \
+  --extra-infer-graph-store collab=artifacts/slice_a_full/interim/collab_graphs.pkl.gz \
+  --extra-infer-graph-store imdb_binary=artifacts/slice_a_full/interim/imdb_binary_graphs.pkl.gz
+```
+
+Run all-test inference using an existing HGS checkpoint:
+
+```bash
+python -m gco_hpif.cli.run_hgs_solver \
+  --mode infer \
+  --split-manifest data/manifests/twitter_split_60_20_20.csv \
+  --interim-dir artifacts/slice_a_full/interim \
+  --raw-graph-store artifacts/slice_a_full/interim/twitter_graphs.pkl.gz \
+  --hgs-root external/HGS/GeometricScatteringMaximalClique \
+  --checkpoint-path artifacts/solver_runs/hgs_full/hgs_checkpoint.pt \
+  --output-dir artifacts/solver_runs/hgs_full_all_test_graphs \
+  --dataset twitter \
+  --infer-splits test \
+  --extra-infer-graph-store collab=artifacts/slice_a_full/interim/collab_graphs.pkl.gz \
+  --extra-infer-graph-store imdb_binary=artifacts/slice_a_full/interim/imdb_binary_graphs.pkl.gz \
+  --num-walkers 20 \
+  --sample-length 90
+```
+
+Expected all-test inference count:
+
+| Dataset      | Inference graphs |
+| ------------ | ---------------- |
+| TWITTER test | 194              |
+| COLLAB       | 5000             |
+| IMDB-BINARY  | 1000             |
+
+---
+
+## Checking solver outputs
+
+After any solver run, inspect the output folder:
+
+```bash
+ls -lh artifacts/solver_runs/<run_name>
+cat artifacts/solver_runs/<run_name>/run_summary.csv
+head artifacts/solver_runs/<run_name>/solver_runs.csv
+cat artifacts/solver_runs/<run_name>/solver_errors.csv
+```
+
+For all-test EGN/HGS runs, check dataset-level counts:
+
+```bash
+python - <<'PY'
+import pandas as pd
+from pathlib import Path
+
+path = Path("artifacts/solver_runs/<run_name>/solver_runs.csv")
+df = pd.read_csv(path)
+
+print("Total rows:", len(df))
+print(df.groupby("dataset").size())
+print()
+print("Invalid clique counts:")
+print(df.groupby("dataset")["clique_valid"].apply(lambda s: (~s.astype(bool)).sum()))
+PY
+```
 
 ---
 
 ## Generated artifacts
 
-The following folders contain generated outputs and should not be committed:
+The following are generated locally and should not be committed:
 
 ```text
 artifacts/
 data/raw/
 data/interim/
+external/EGN/erdos_neu/
+external/HGS/GeometricScatteringMaximalClique/
+*.pt
+*.pth
+*.ckpt
+__pycache__/
+.pytest_cache/
 ```
 
-The repository commits source code, tests, documentation, and small reproducibility manifests only.
+The repository commits source code, tests, documentation, small fixed manifests, and external-dependency placeholders only.
 
 ---
 
 ## Development workflow
 
-Before starting a new pipeline part:
+Start a new branch:
 
 ```bash
 git checkout main
 git pull origin main
-git checkout -b part-name
+git checkout -b <branch-name>
 ```
 
-After making changes:
+Run checks:
 
 ```bash
 pytest -q
-git status
-git add <relevant files>
-git commit -m "Descriptive commit message"
-git push -u origin part-name
+python -m py_compile src/gco_hpif/cli/*.py
 ```
 
-Then open a pull request on GitHub and merge into `main`.
+Commit and push:
+
+```bash
+git status
+git add <relevant source/docs/tests only>
+git commit -m "Descriptive commit message"
+git push -u origin <branch-name>
+```
+
+Open a pull request into `main`, merge online, then sync locally:
+
+```bash
+git checkout main
+git pull origin main
+git branch -d <branch-name>
+git status
+```
 
 ---
 
 ## License
 
 This repository is released under the MIT License.
+
