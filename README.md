@@ -24,7 +24,7 @@ The repository is being built in modular parts so that each stage can be tested 
 - [x] **Part D.1:** Gurobi maximum-clique solver wrapper
 - [x] **Part D.2:** CliSAT solver wrapper
 - [x] **Part D.3:** MOMC solver wrapper
-- [ ] **Part D.4:** EGN training/inference wrapper
+- [x] **Part D.4:** EGN training/inference wrapper
 - [ ] **Part D.5:** HGS training/inference wrapper
 - [ ] **Part E:** Hardness label construction
 - [ ] **Part F:** Hardness prediction models
