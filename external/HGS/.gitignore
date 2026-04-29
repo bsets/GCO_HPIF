@@ -1,0 +1,5 @@
+GeometricScatteringMaximalClique/
+*.pt
+*.pth
+*.ckpt
+__pycache__/
