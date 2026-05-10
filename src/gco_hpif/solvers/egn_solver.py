@@ -16,6 +16,7 @@ wrappers:
 
 from __future__ import annotations
 
+import re
 import csv
 import gzip
 import importlib
@@ -581,13 +582,98 @@ def _iter_extra_graph_items(store: Any) -> list[tuple[Any, Any]]:
     raise TypeError(f"Unsupported extra graph-store type: {type(store).__name__}")
 
 
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return int(value)
+    except Exception:
+        return None
+
+
+def canonical_graph_id(dataset_name: str, source_index: int) -> str:
+    """Return the repository-standard graph ID for a dataset/source index."""
+    return f"{dataset_name}_graph{int(source_index):06d}"
+
+
+def _extract_record_graph_id(record: Any) -> str | None:
+    for key in ("graph_id", "id"):
+        value = _record_value(record, key, None)
+        if value is not None and str(value).strip() != "":
+            return str(value).strip()
+    return None
+
+
+def _extract_record_source_index(record: Any) -> int | None:
+    for key in ("source_index", "index", "idx"):
+        value = _record_value(record, key, None)
+        out = _int_or_none(value)
+        if out is not None:
+            return out
+    return None
+
+
+def _canonicalize_extra_graph_identity(
+    dataset_name: str,
+    graph_id_hint: Any,
+    graph_like: Any,
+    position: int,
+) -> tuple[str, int]:
+    """Return a canonical `(graph_id, source_index)` pair for extra all-test stores."""
+    dataset_name = str(dataset_name).strip()
+
+    record_graph_id = _extract_record_graph_id(graph_like)
+    record_source_index = _extract_record_source_index(graph_like)
+
+    hint_str = None if graph_id_hint is None else str(graph_id_hint).strip()
+    hint_int = _int_or_none(graph_id_hint)
+
+    chosen_graph_id = None
+    if record_graph_id:
+        chosen_graph_id = record_graph_id
+    elif hint_str:
+        chosen_graph_id = hint_str
+
+    if chosen_graph_id:
+        m = re.fullmatch(rf"{re.escape(dataset_name)}_graph(\d{{6}})", chosen_graph_id)
+        if m:
+            source_index = int(m.group(1))
+            return chosen_graph_id, source_index
+
+        m = re.fullmatch(rf"{re.escape(dataset_name)}_(\d{{6}})", chosen_graph_id)
+        if m:
+            zero_based = int(m.group(1))
+            source_index = zero_based + 1
+            return canonical_graph_id(dataset_name, source_index), source_index
+
+    if record_source_index is not None:
+        source_index = int(record_source_index)
+        if source_index == position:
+            source_index = source_index + 1
+        return canonical_graph_id(dataset_name, source_index), source_index
+
+    if hint_int is not None:
+        source_index = int(hint_int) + 1
+        return canonical_graph_id(dataset_name, source_index), source_index
+
+    source_index = int(position) + 1
+    return canonical_graph_id(dataset_name, source_index), source_index
+
+
 def build_extra_pyg_infer_datasets(
     specs: list[str],
 ) -> tuple[list[Any], pd.DataFrame, dict[str, nx.Graph]]:
     """Build PyG test data from full graph stores outside the Twitter split manifest.
 
-    Each spec is formatted as dataset=path/to/graphs.pkl.gz. All graphs in these
-    stores are treated as test/inference graphs.
+    Each spec is formatted as dataset=path/to/graphs.pkl.gz. All graphs in these stores
+    are treated as test/inference graphs.
+
+    This function uses repository-standard graph IDs for extra datasets, e.g.:
+        collab_graph000001, collab_graph000002, ...
+        imdb_binary_graph000001, imdb_binary_graph000002, ...
     """
     extra_test_data: list[Any] = []
     extra_rows: list[dict[str, Any]] = []
@@ -604,17 +690,12 @@ def build_extra_pyg_infer_datasets(
             desc=f"EGN materialise all-test {dataset_name}",
         ):
             graph = normalise_networkx_graph(graph_like)
-
-            graph_id = f"{dataset_name}_{position:06d}"
-            if isinstance(graph_id_hint, str) and graph_id_hint:
-                graph_id = f"{dataset_name}_{graph_id_hint}"
-
-            source_index = position
-            try:
-                if isinstance(graph_id_hint, int):
-                    source_index = int(graph_id_hint)
-            except Exception:
-                source_index = position
+            graph_id, source_index = _canonicalize_extra_graph_identity(
+                dataset_name=dataset_name,
+                graph_id_hint=graph_id_hint,
+                graph_like=graph_like,
+                position=position,
+            )
 
             data = networkx_to_pyg_data(graph)
             data.graph_id = str(graph_id)
@@ -639,7 +720,6 @@ def build_extra_pyg_infer_datasets(
 
     extra_df = pd.DataFrame(extra_rows, columns=SPLIT_MANIFEST_COLUMNS)
     return extra_test_data, extra_df, extra_nx_by_graph_id
-
 
 
 def require_torch_geometric() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
