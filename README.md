@@ -2,7 +2,22 @@
 
 **GCO-HPIF** stands for **Graph-Based Combinatorial Optimization — Hardness Prediction and Interpretation Framework**.
 
-This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the **Maximum Clique Problem (MCP)**. The completed stages currently cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, and solver wrappers for exact and learned maximum-clique solvers.
+This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the Maximum Clique Problem (MCP). The completed stages currently cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, solver wrappers for exact, heuristic, and learned maximum-clique solvers, runtime-consensus hardness label construction, and downstream ML hardness classification from graph features.## Completed pipeline status
+
+| Part | Status | Description |
+|---|---:|---|
+| Part A | Complete | Raw graph ingestion and graph manifests |
+| Part B | Complete | Fixed TWITTER 60/20/20 train/validation/test split manifest |
+| Part C | Complete | 23 NetworkX graph features with 60-second timeout logging |
+| Part D.1 | Complete | Gurobi maximum-clique solver wrapper |
+| Part D.2 | Complete | CliSAT maximum-clique solver wrapper |
+| Part D.3 | Complete | MoMC maximum-clique solver wrapper |
+| Part D.4 | Complete | Optional EGN training/inference wrapper |
+| Part D.5 | Complete | Optional HGS training/inference wrapper |
+| Part E | Complete | Runtime-consensus hardness label construction from five solver outputs |
+| Part F | Complete | ML hardness classification from graph features using feature selection and tuned classifiers |
+
+Future stages planned for this repository include association-rule mining, percentile-bin interpretation of selected graph features, and computation-time prediction.
 
 ---
 
