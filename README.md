@@ -2,7 +2,9 @@
 
 **GCO-HPIF** stands for **Graph-Based Combinatorial Optimization — Hardness Prediction and Interpretation Framework**.
 
-This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the Maximum Clique Problem (MCP). The completed stages currently cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, solver wrappers for exact, heuristic, and learned maximum-clique solvers, runtime-consensus hardness label construction, and downstream ML hardness classification from graph features.## Completed pipeline status
+This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the Maximum Clique Problem (MCP). The completed stages currently cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, solver wrappers for exact, heuristic, and learned maximum-clique solvers, runtime-consensus hardness label construction, and downstream ML hardness classification from graph features.
+
+## Completed pipeline status
 
 | Part | Status | Description |
 |---|---:|---|
