@@ -22,24 +22,6 @@ This repository contains a modular, reproducible pipeline for studying graph-ins
 Future stages planned for this repository include association-rule mining, percentile-bin interpretation of selected graph features, and computation-time prediction.
 
 ---
-
-## Completed pipeline status
-
-| Part     | Status   | Description                                                 |
-| -------- | -------- | ----------------------------------------------------------- |
-| Part A   | Complete | Raw graph ingestion and graph manifests                     |
-| Part B   | Complete | Fixed TWITTER 60/20/20 train/validation/test split manifest |
-| Part C   | Complete | 23 NetworkX graph features with 60-second timeout logging   |
-| Part D.1 | Complete | Gurobi maximum-clique solver wrapper                        |
-| Part D.2 | Complete | CliSAT maximum-clique solver wrapper                        |
-| Part D.3 | Complete | MoMC maximum-clique solver wrapper                          |
-| Part D.4 | Complete | Optional EGN training/inference wrapper                     |
-| Part D.5 | Complete | Optional HGS training/inference wrapper                     |
-
-Future stages planned for this repository include hardness label construction, hardness prediction models, feature selection, association-rule mining, and computation-time prediction.
-
----
-
 ## Datasets
 
 The current pipeline uses:
