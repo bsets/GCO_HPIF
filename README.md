@@ -2,7 +2,9 @@
 
 **GCO-HPIF** stands for **Graph-Based Combinatorial Optimization — Hardness Prediction and Interpretation Framework**.
 
-This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the Maximum Clique Problem (MCP). The completed stages currently cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, solver wrappers for exact, heuristic, and learned maximum-clique solvers, runtime-consensus hardness label construction, ML hardness classification from graph features, and association-rule-based interpretation of hardness patterns.
+This repository contains a modular, reproducible pipeline for studying graph-instance hardness for the Maximum Clique Problem (MCP). The completed stages cover raw graph ingestion, fixed TWITTER train/validation/test splitting, graph-feature computation, solver wrappers for exact, heuristic, and learned maximum-clique solvers, runtime-consensus hardness label construction, ML hardness classification from graph features, association-rule-based interpretation of hardness patterns, and solver-specific runtime prediction from graph features.
+
+The current planned numbered pipeline is complete through **Part H**. No additional numbered pipeline parts are currently planned.
 
 ## Completed pipeline status
 
@@ -19,10 +21,10 @@ This repository contains a modular, reproducible pipeline for studying graph-ins
 | Part E | Complete | Runtime-consensus hardness label construction from five solver outputs |
 | Part F | Complete | ML hardness classification from graph features using feature selection and tuned classifiers |
 | Part G | Complete | FP-Growth association-rule mining for interpretable hardness-pattern discovery |
-
-Future stages planned for this repository include computation-time prediction, deeper cross-dataset interpretation, and additional robustness/sensitivity studies.
+| Part H | Complete | Runtime prediction from 23 graph features and five solver runtime outputs |
 
 ---
+
 ## Datasets
 
 The current pipeline uses:
@@ -40,7 +42,7 @@ artifacts/slice_a_full/interim/
 └── imdb_binary_graphs.pkl.gz
 ```
 
-Generated data and solver outputs are written under `artifacts/` and are not committed to GitHub.
+Generated data and solver outputs are written under `artifacts/` and are not committed to GitHub by default.
 
 ---
 
@@ -490,7 +492,6 @@ Expected all-test inference count:
 | COLLAB       | 5000             |
 | IMDB-BINARY  | 1000             |
 
-
 ---
 
 ## Part E — Runtime-consensus hardness labels
@@ -702,6 +703,108 @@ Part G also includes strict safeguards to prevent accidental use of all `feature
 
 ---
 
+## Part H — Runtime prediction from graph features
+
+Part H adds a runtime-prediction layer to the GCO-HPIF pipeline. It uses the 23 graph features computed in Part C and the runtime outputs from the five maximum-clique solvers used in Part E to predict solver runtime for graph instances from TWITTER, COLLAB, and IMDB-BINARY.
+
+The runtime-prediction dataset is built by joining:
+
+```text
+artifacts/features_full/graph_features.csv
+```
+
+with the five standardized solver-run files:
+
+```text
+artifacts/solver_runs/gurobi_full/solver_runs.csv
+artifacts/solver_runs/clisat_full/solver_runs.csv
+artifacts/solver_runs/momc_full/solver_runs.csv
+artifacts/solver_runs/egn_full_all_test_graphs_fixed/solver_runs.csv
+artifacts/solver_runs/hgs_full_all_test_graphs/solver_runs.csv
+```
+
+Part H uses all valid `feature_` columns from Part C as predictors. The prediction target is:
+
+```text
+log(runtime_seconds)
+```
+
+The logarithmic runtime target is used because solver runtimes vary by orders of magnitude across instances, datasets, and algorithms. Model predictions are transformed back to runtime seconds before evaluation.
+
+The pipeline trains and tunes the following regressors:
+
+- XGBoost Regressor
+- Random Forest Regressor
+- Support Vector Regressor
+- Linear/Ridge Regression baseline
+
+The best model for each solver is selected using held-out MAPE on original runtime seconds. Additional metrics include RMSE, MAE, and R2.
+
+Example smoke-test command:
+
+```bash
+PYTHONPATH=$PWD/src python -m gco_hpif.cli.train_runtime_predictors \
+  --features artifacts/features_full/graph_features.csv \
+  --solver-runs \
+    artifacts/solver_runs/gurobi_full/solver_runs.csv \
+    artifacts/solver_runs/clisat_full/solver_runs.csv \
+    artifacts/solver_runs/momc_full/solver_runs.csv \
+    artifacts/solver_runs/egn_full_all_test_graphs_fixed/solver_runs.csv \
+    artifacts/solver_runs/hgs_full_all_test_graphs/solver_runs.csv \
+  --output-dir artifacts/runtime_prediction_part_h_smoke \
+  --models RF,LR \
+  --grid-size tiny \
+  --cv-folds 2 \
+  --max-rows-per-algorithm 100 \
+  --verbose 0
+```
+
+Example full command:
+
+```bash
+PYTHONPATH=$PWD/src python -m gco_hpif.cli.train_runtime_predictors \
+  --features artifacts/features_full/graph_features.csv \
+  --solver-runs \
+    artifacts/solver_runs/gurobi_full/solver_runs.csv \
+    artifacts/solver_runs/clisat_full/solver_runs.csv \
+    artifacts/solver_runs/momc_full/solver_runs.csv \
+    artifacts/solver_runs/egn_full_all_test_graphs_fixed/solver_runs.csv \
+    artifacts/solver_runs/hgs_full_all_test_graphs/solver_runs.csv \
+  --output-dir artifacts/runtime_prediction_part_h \
+  --models XGB,RF,SVR,LR \
+  --grid-size compact \
+  --cv-folds 5 \
+  --test-size 0.20 \
+  --grid-n-jobs 1 \
+  --model-n-jobs 1
+```
+
+Main outputs:
+
+```text
+artifacts/runtime_prediction_part_h/
+├── runtime_prediction_part_h_config.json
+├── part_h_runtime_prediction_results.xlsx
+├── tables/
+│   ├── runtime_prediction_dataset_long.csv
+│   ├── runtime_prediction_dataset_wide.csv
+│   ├── runtime_prediction_all_model_results.csv
+│   ├── runtime_prediction_best_models_by_mape.csv
+│   ├── runtime_prediction_winner_predictions.csv
+│   └── runtime_prediction_winner_feature_importances.csv
+├── plots/
+│   ├── <Algorithm>_best_by_mape_actual_vs_predicted_runtime.png
+│   ├── <Algorithm>_<Model>_feature_importance.png
+│   ├── runtime_prediction_actual_vs_predicted_best_by_mape_combined.png
+│   └── runtime_prediction_feature_importances_best_by_mape_combined.png
+└── models/
+    └── <Algorithm>_<Model>_best_log_runtime_regressor.joblib
+```
+
+Part H completes the current GCO-HPIF pipeline by extending the framework from hardness labelling, hardness prediction, and hardness interpretation to solver-specific runtime prediction.
+
+---
+
 ## Checking solver outputs
 
 After any solver run, inspect the output folder:
@@ -735,7 +838,7 @@ PY
 
 ## Generated artifacts
 
-The following are generated locally and should not be committed:
+The following are generated locally and should not be committed by default:
 
 ```text
 artifacts/
@@ -746,11 +849,12 @@ external/HGS/GeometricScatteringMaximalClique/
 *.pt
 *.pth
 *.ckpt
+*.joblib
 __pycache__/
 .pytest_cache/
 ```
 
-The repository commits source code, tests, documentation, small fixed manifests, and external-dependency placeholders only.
+The repository commits source code, tests, documentation, small fixed manifests, external-dependency placeholders, and selectively committed small summary outputs when useful for documenting reproducible pipeline results. Large generated artifacts, trained model files, raw data, checkpoints, and local caches should not be committed.
 
 ---
 
@@ -794,4 +898,3 @@ git status
 ## License
 
 This repository is released under the MIT License.
-
